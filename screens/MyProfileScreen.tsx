@@ -2,8 +2,8 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MY_PROFILE = {
-  name: 'Alex',
-  age: 27,
+  name: 'Jerry',
+  age: 67,
   location: 'Los Angeles, CA',
   bio: 'Adventure seeker & coffee lover. Let\'s make memories ✨',
   interests: ['Travel', 'Coffee', 'Music', 'Hiking', 'Photography'],
