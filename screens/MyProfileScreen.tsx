@@ -2,7 +2,7 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MY_PROFILE = {
-  name: 'Jerry',
+  name: 'Taylor Jimmy Haynes Clarity Fenec Fusion',
   age: 67,
   location: 'Los Angeles, CA',
   bio: 'Adventure seeker & coffee lover. Let\'s make memories ✨',
