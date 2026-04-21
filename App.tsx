@@ -1,12 +1,15 @@
 import { useRef, useState } from 'react';
 import { useFonts, LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Profile } from './data/profiles';
 import FeedScreen from './screens/FeedScreen';
 import MatchesScreen, { MatchesScreenHandle } from './screens/MatchesScreen';
 import MyProfileScreen from './screens/MyProfileScreen';
+import LoginScreen from './screens/auth/LoginScreen';
+import SignupScreen from './screens/auth/SignupScreen';
 
 type Tab = 'feed' | 'matches' | 'profile';
 
@@ -114,6 +117,27 @@ function Main() {
   );
 }
 
+function RootNavigator() {
+  const { session, loading } = useAuth();
+  const [authScreen, setAuthScreen] = useState<'login' | 'signup'>('login');
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color="#ff6b1a" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return authScreen === 'login'
+      ? <LoginScreen onGoToSignup={() => setAuthScreen('signup')} />
+      : <SignupScreen onGoToLogin={() => setAuthScreen('login')} />;
+  }
+
+  return <Main />;
+}
+
 export default function App() {
   const [fontsLoaded] = useFonts({ LilitaOne_400Regular });
   if (!fontsLoaded) return null;
@@ -121,7 +145,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Main />
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
