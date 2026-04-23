@@ -128,7 +128,7 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
     const targetYs = frags.map((_, i) => Math.sin(FRAG_ANGLES[i]) * (20 + Math.random() * 55));
 
     frags.forEach((f, i) => {
-      const fragAnim = Animated.sequence([
+      Animated.sequence([
         Animated.delay(BURST_DELAY),
         Animated.parallel([
           Animated.sequence([
@@ -140,9 +140,7 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
           Animated.timing(f.x, { toValue: targetXs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
           Animated.timing(f.y, { toValue: targetYs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
         ]),
-      ]);
-      runningAnims.current.push(fragAnim);
-      fragAnim.start();
+      ]).start();
     });
 
     onLike();
