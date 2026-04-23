@@ -121,19 +121,18 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
     const targetYs = frags.map((_, i) => Math.sin(FRAG_ANGLES[i]) * (20 + Math.random() * 55));
 
     frags.forEach((f, i) => {
-      Animated.sequence([
-        Animated.delay(BURST_DELAY),
+      setTimeout(() => {
         Animated.parallel([
           Animated.sequence([
-            Animated.timing(f.opacity, { toValue: 0.6, duration: 20, useNativeDriver: true }),
+            Animated.timing(f.opacity, { toValue: 0.6, duration: 20, useNativeDriver: false }),
             Animated.delay(160),
-            Animated.timing(f.opacity, { toValue: 0, duration: 130, useNativeDriver: true }),
+            Animated.timing(f.opacity, { toValue: 0, duration: 130, useNativeDriver: false }),
           ]),
-          Animated.spring(f.scale, { toValue: 0.5 + Math.random() * 0.9, friction: 5, tension: 280, useNativeDriver: true }),
-          Animated.timing(f.x, { toValue: targetXs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(f.y, { toValue: targetYs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        ]),
-      ]).start();
+          Animated.spring(f.scale, { toValue: 0.5 + Math.random() * 0.9, friction: 5, tension: 280, useNativeDriver: false }),
+          Animated.timing(f.x, { toValue: targetXs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+          Animated.timing(f.y, { toValue: targetYs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+        ]).start();
+      }, BURST_DELAY);
     });
 
     onLike();
