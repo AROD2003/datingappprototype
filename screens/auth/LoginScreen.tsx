@@ -17,6 +17,14 @@ type Props = {
 	onGoToSignup: () => void;
 };
 
+function mapAuthError(error: string): string {
+	if (error.includes('Invalid login credentials')) return 'Incorrect email or password.';
+	if (error.includes('Email not confirmed')) return 'Please confirm your email first.';
+	if (error.includes('User already registered')) return 'An account with this email already exists.';
+	if (error.includes('too many requests')) return 'Too many attempts. Please wait a moment.';
+	return 'Something went wrong. Please try again.';
+}
+
 export default function LoginScreen({ onGoToSignup }: Props) {
 	const { signIn } = useAuth();
 	const [email, setEmail] = useState('');
@@ -42,7 +50,7 @@ export default function LoginScreen({ onGoToSignup }: Props) {
 		setLoading(true);
 		setError(null);
 		const { error } = await signIn(email, password);
-		if (error) setError(error);
+		if (error) setError(mapAuthError(error));
 		setLoading(false);
 	}
 

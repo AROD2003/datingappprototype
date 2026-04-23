@@ -35,29 +35,41 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const maxIdx = useRef(0);
 
   const [matchedIds, setMatchedIds] = useState<Set<string>>(new Set());
+  const likedIds = useRef<Set<string>>(new Set());
   const [lockedThreshold, setLockedThreshold] = useState(0);
   const lockedThresholdRef = useRef(0);
   const [likeSignals, setLikeSignals] = useState<{ [id: string]: number }>({});
   const [wiggleSignals, setWiggleSignals] = useState<{ [id: string]: number }>({});
+  const hapticTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wiggleFired = useRef(false);
 
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => { scrollYVal.current = value; });
-    return () => scrollY.removeListener(id);
+    return () => {
+      scrollY.removeListener(id);
+      hapticTimers.current.forEach(clearTimeout);
+    };
   }, []);
 
   const playMatchSound = async () => {
-    const { sound } = await Audio.Sound.createAsync(require('../assets/match.wav'));
-    await sound.playAsync();
-    sound.setOnPlaybackStatusUpdate(status => {
-      if (status.isLoaded && status.didJustFinish) sound.unloadAsync();
-    });
+    let sound: Audio.Sound | null = null;
+    try {
+      const result = await Audio.Sound.createAsync(require('../assets/match.wav'));
+      sound = result.sound;
+      await sound.playAsync();
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (status.isLoaded && status.didJustFinish) sound?.unloadAsync();
+      });
+    } catch {
+      sound?.unloadAsync();
+    }
   };
 
   const fireMatchHaptics = () => {
-    // Explosive flutter: rapid heavy bursts then softer trailing pulses
+    hapticTimers.current.forEach(clearTimeout);
+    hapticTimers.current = [];
     const pattern = [0, 60, 110, 150, 180, 230, 270, 320, 380, 450];
-    const styles = [
+    const hapticStyles = [
       Haptics.ImpactFeedbackStyle.Heavy,
       Haptics.ImpactFeedbackStyle.Heavy,
       Haptics.ImpactFeedbackStyle.Heavy,
@@ -70,7 +82,8 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       Haptics.ImpactFeedbackStyle.Light,
     ];
     pattern.forEach((delay, i) => {
-      setTimeout(() => Haptics.impactAsync(styles[i]), delay);
+      const timer = setTimeout(() => Haptics.impactAsync(hapticStyles[i]), delay);
+      hapticTimers.current.push(timer);
     });
   };
 
@@ -144,6 +157,9 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       if (!profile) return;
       // Don't like locked profiles
       if (currentIdx.current < lockedThresholdRef.current) return;
+      // Don't re-like a profile already liked
+      if (likedIds.current.has(profile.id)) return;
+      likedIds.current.add(profile.id);
       setLikeSignals(prev => ({ ...prev, [profile.id]: (prev[profile.id] ?? 0) + 1 }));
     });
 

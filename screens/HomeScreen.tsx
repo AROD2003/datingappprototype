@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -24,10 +24,11 @@ export default function HomeScreen({ onVideoPress }: Props) {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
 
-  const filtered = VIDEOS.filter(v =>
-    v.title.toLowerCase().includes(search.toLowerCase()) ||
-    v.channel.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() =>
+    VIDEOS.filter(v =>
+      v.title.toLowerCase().includes(search.trim().toLowerCase()) ||
+      v.channel.toLowerCase().includes(search.trim().toLowerCase())
+    ), [search]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

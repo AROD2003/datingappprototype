@@ -1,10 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
-const SUPABASE_URL = 'https://pybihdbdvdllvbjchvpw.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_0Ro8Oc9whLdY5OQKMSpX-Q_-9tzz_cm';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-// SecureStore adapter so Supabase persists the session on device
 const ExpoSecureStoreAdapter = {
 	getItem: (key: string) => SecureStore.getItemAsync(key),
 	setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),

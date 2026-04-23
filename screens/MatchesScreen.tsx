@@ -91,6 +91,9 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
             keyExtractor={item => item.id}
             numColumns={2}
             contentContainerStyle={styles.grid}
+            initialNumToRender={6}
+            maxToRenderPerBatch={4}
+            windowSize={5}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.matchCell} activeOpacity={0.85}>
                 <Image source={{ uri: item.photos[0] }} style={styles.matchPhoto} />
@@ -112,6 +115,9 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
             data={messages}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.msgList}
+            initialNumToRender={8}
+            maxToRenderPerBatch={6}
+            windowSize={5}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.msgRow} activeOpacity={0.75}>
                 <Image source={{ uri: item.photo }} style={styles.msgAvatar} />

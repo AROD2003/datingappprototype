@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -29,12 +29,21 @@ type Props = {
   onShootShot?: () => void;
 };
 
-export default function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot }: Props) {
+function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot }: Props) {
   const [showInfo, setShowInfo] = useState(false);
   const [showExplosion, setShowExplosion] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
 
   const lockRotate = useRef(new Animated.Value(0)).current;
+  const runningAnims = useRef<Animated.CompositeAnimation[]>([]);
+  const hapticTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      runningAnims.current.forEach(a => a.stop());
+      if (hapticTimer.current) clearTimeout(hapticTimer.current);
+    };
+  }, []);
 
 const likeTextScaleX = useRef(new Animated.Value(0)).current;
   const likeTextScaleY = useRef(new Animated.Value(0)).current;
@@ -56,13 +65,15 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
     if (!wiggleSignal) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     lockRotate.setValue(0);
-    Animated.sequence([
+    const anim = Animated.sequence([
       Animated.timing(lockRotate, { toValue: 1, duration: 60, useNativeDriver: true }),
       Animated.timing(lockRotate, { toValue: -1, duration: 60, useNativeDriver: true }),
       Animated.timing(lockRotate, { toValue: 1, duration: 60, useNativeDriver: true }),
       Animated.timing(lockRotate, { toValue: -1, duration: 60, useNativeDriver: true }),
       Animated.timing(lockRotate, { toValue: 0, duration: 60, useNativeDriver: true }),
-    ]).start();
+    ]);
+    runningAnims.current.push(anim);
+    anim.start();
   }, [wiggleSignal]);
 
   const advancePhoto = (dir: 1 | -1) => {
@@ -72,14 +83,15 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
   };
 
   const triggerLike = () => {
+    runningAnims.current.forEach(a => a.stop());
+    runningAnims.current = [];
     likeTextScaleX.setValue(0);
     likeTextScaleY.setValue(0);
     likeTextOpacity.setValue(0);
     frags.forEach(f => { f.x.setValue(0); f.y.setValue(0); f.opacity.setValue(0); f.scale.setValue(0); });
 
-    Animated.sequence([
+    const mainAnim = Animated.sequence([
       Animated.parallel([
-        // scaleX and scaleY in parallel — stretch wide on bounce 1 for 3D effect
         Animated.sequence([
           Animated.parallel([
             Animated.timing(likeTextScaleX, { toValue: 2.0, duration: 50, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
@@ -97,15 +109,16 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
         Animated.timing(likeTextOpacity, { toValue: 1, duration: 25, useNativeDriver: true }),
       ]),
       Animated.delay(130),
-      // Text pops out while hearts burst
       Animated.timing(likeTextOpacity, { toValue: 0, duration: 30, useNativeDriver: true }),
-    ]).start();
+    ]);
+    runningAnims.current.push(mainAnim);
+    mainAnim.start();
 
     // Haptic on LIKED! appearance
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    // Haptic pop when hearts burst
-    setTimeout(() => {
+    if (hapticTimer.current) clearTimeout(hapticTimer.current);
+    hapticTimer.current = setTimeout(() => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }, 290);
 
@@ -115,7 +128,7 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
     const targetYs = frags.map((_, i) => Math.sin(FRAG_ANGLES[i]) * (20 + Math.random() * 55));
 
     frags.forEach((f, i) => {
-      Animated.sequence([
+      const fragAnim = Animated.sequence([
         Animated.delay(BURST_DELAY),
         Animated.parallel([
           Animated.sequence([
@@ -127,7 +140,9 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
           Animated.timing(f.x, { toValue: targetXs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
           Animated.timing(f.y, { toValue: targetYs[i], duration: 310, easing: Easing.out(Easing.quad), useNativeDriver: true }),
         ]),
-      ]).start();
+      ]);
+      runningAnims.current.push(fragAnim);
+      fragAnim.start();
     });
 
     onLike();
@@ -405,3 +420,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
+
+export default memo(ProfileCard);
