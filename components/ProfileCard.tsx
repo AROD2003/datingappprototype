@@ -83,13 +83,6 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
   };
 
   const triggerLike = () => {
-    runningAnims.current.forEach(a => a.stop());
-    runningAnims.current = [];
-    likeTextScaleX.setValue(0);
-    likeTextScaleY.setValue(0);
-    likeTextOpacity.setValue(0);
-    frags.forEach(f => { f.x.setValue(0); f.y.setValue(0); f.opacity.setValue(0); f.scale.setValue(0); });
-
     const mainAnim = Animated.sequence([
       Animated.parallel([
         Animated.sequence([
