@@ -13,7 +13,7 @@ import { Profile } from '../data/profiles';
 
 const { width: W, height: H } = Dimensions.get('window');
 
-const PARTICLE_COUNT = 80;
+const PARTICLE_COUNT = 40;
 const PARTICLE_SYMBOLS = ['♥', '♥', '✦', '✦', '■', '●', '★'];
 const COLORS = [
   '#FF2D55', '#FF6B6B', '#FFD700', '#FF69B4',
@@ -161,7 +161,7 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
     Animated.stagger(5, particles.map(p =>
       Animated.parallel([
         Animated.timing(p.opacity, { toValue: 1, duration: 25, useNativeDriver: true }),
-        Animated.spring(p.scale, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }),
+        Animated.timing(p.scale, { toValue: 1, duration: 120, easing: Easing.out(Easing.back(1.5)), useNativeDriver: true }),
         Animated.timing(p.x, { toValue: p.tx, duration: p.dur, easing: Easing.out(Easing.quad), useNativeDriver: true }),
         Animated.timing(p.y, { toValue: p.ty, duration: p.dur, easing: Easing.out(Easing.quad), useNativeDriver: true }),
         Animated.timing(p.rotate, { toValue: 1, duration: p.dur, useNativeDriver: true }),
