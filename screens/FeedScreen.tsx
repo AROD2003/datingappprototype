@@ -29,6 +29,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollYVal = useRef(0);
   const dragStart = useRef(0);
+  const panDistance = useRef(0);
 
   // Which card we're committed to (updated immediately on swipe end)
   const currentIdx = useRef(0);
@@ -117,9 +118,11 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     .onBegin(() => {
       scrollY.stopAnimation();
       dragStart.current = scrollYVal.current;
+      panDistance.current = 0;
       wiggleFired.current = false;
     })
     .onUpdate((e) => {
+      panDistance.current = Math.abs(e.translationY);
       const raw = dragStart.current + e.translationY;
       const min = -(PROFILES.length - 1) * H;
       const backLimit = Math.max(0, lockedThresholdRef.current - 1);
@@ -148,8 +151,9 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     .runOnJS(true)
     .onStart((e) => {
       if (e.y > H - TAP_ZONE_BOTTOM_CUTOFF) return;
-      // Exclude arrow zones on left and right edges
       if (e.x < 60 || e.x > W - 60) return;
+      // Ignore if the finger moved enough to be a scroll, not a tap
+      if (panDistance.current > 20) return;
       // currentIdx is already the destination card even mid-animation
       const profile = PROFILES[currentIdx.current];
       if (!profile) return;
