@@ -89,12 +89,10 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
   const handleLike = (profile: Profile) => {
     if (matchedIds.has(profile.id)) return;
-    if (Math.random() > 0.35) {
-      setMatchedIds(prev => new Set([...prev, profile.id]));
-      onMatch(profile);
-      playMatchSound();
-      fireMatchHaptics();
-    }
+    setMatchedIds(prev => new Set([...prev, profile.id]));
+    onMatch(profile);
+    playMatchSound();
+    fireMatchHaptics();
   };
 
   const snapToIndex = (idx: number) => {

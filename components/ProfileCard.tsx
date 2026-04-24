@@ -39,6 +39,7 @@ function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSigna
   const hapticTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    profile.photos.forEach(uri => Image.prefetch(uri));
     return () => {
       runningAnims.current.forEach(a => a.stop());
       if (hapticTimer.current) clearTimeout(hapticTimer.current);
@@ -198,6 +199,10 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
           <View style={styles.nameRow}>
             <Text style={styles.name}>{profile.name}, {profile.age}</Text>
             {profile.verified && <Text style={styles.verified}>✓</Text>}
+            <Text style={styles.infoToggle} onPress={() => setShowInfo(v => !v)}>
+              {showInfo ? 'less ' : 'more '}
+              <Text style={styles.infoToggleArrow}>{showInfo ? '↓' : '↑'}</Text>
+            </Text>
           </View>
 
           <Text style={styles.location}>📍 {profile.distance}</Text>
@@ -216,11 +221,6 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
           )}
 
         </View>
-
-        <Text style={styles.infoToggle} onPress={() => setShowInfo(v => !v)}>
-          {showInfo ? 'less ' : 'more '}
-          <Text style={styles.infoToggleArrow}>{showInfo ? '↑' : '↓'}</Text>
-        </Text>
 
         {showExplosion && (
           <MatchExplosion
@@ -378,8 +378,9 @@ const styles = StyleSheet.create({
   },
   infoToggle: {
     position: 'absolute',
-    bottom: 137,
-    left: 190,
+    left: -22,
+    right: -22,
+    textAlign: 'center',
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',

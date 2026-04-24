@@ -6,7 +6,6 @@ export type Profile = {
   distance: string;
   bio: string;
   interests: string[];
-  photo: string;
   photos: string[];
   verified: boolean;
 };
@@ -20,7 +19,6 @@ export const PROFILES: Profile[] = [
     distance: '2 miles away',
     bio: 'Sunsets, sushi, and spontaneous road trips. Let\'s get lost together 🌅',
     interests: ['Travel', 'Yoga', 'Foodie', 'Music'],
-    photo: 'https://randomuser.me/api/portraits/women/1.jpg',
     photos: [
       'https://randomuser.me/api/portraits/women/1.jpg',
       'https://picsum.photos/seed/sofia2/400/700',
@@ -37,7 +35,6 @@ export const PROFILES: Profile[] = [
     distance: '5 miles away',
     bio: 'Surfer by day, chef by night. Will cook for you 🍳',
     interests: ['Surfing', 'Cooking', 'Dogs', 'Hiking'],
-    photo: 'https://randomuser.me/api/portraits/men/32.jpg',
     photos: [
       'https://randomuser.me/api/portraits/men/32.jpg',
       'https://picsum.photos/seed/jake2/400/700',
@@ -53,7 +50,6 @@ export const PROFILES: Profile[] = [
     distance: '8 miles away',
     bio: 'Artist & coffee addict. Looking for my muse ☕🎨',
     interests: ['Art', 'Coffee', 'Concerts', 'Photography'],
-    photo: 'https://randomuser.me/api/portraits/women/44.jpg',
     photos: [
       'https://randomuser.me/api/portraits/women/44.jpg',
       'https://picsum.photos/seed/maya2/400/700',
@@ -70,7 +66,6 @@ export const PROFILES: Profile[] = [
     distance: '3 miles away',
     bio: 'Architect by day, salsa dancer by night. Let\'s build something together 💃',
     interests: ['Dancing', 'Architecture', 'Travel', 'Wine'],
-    photo: 'https://randomuser.me/api/portraits/men/5.jpg',
     photos: [
       'https://randomuser.me/api/portraits/men/5.jpg',
       'https://picsum.photos/seed/carlos2/400/700',
@@ -86,7 +81,6 @@ export const PROFILES: Profile[] = [
     distance: '12 miles away',
     bio: 'Book nerd who also loves brunch. Swipe right if you know a good mimosa spot 🥂',
     interests: ['Reading', 'Brunch', 'Pilates', 'Podcasts'],
-    photo: 'https://randomuser.me/api/portraits/women/17.jpg',
     photos: [
       'https://randomuser.me/api/portraits/women/17.jpg',
       'https://picsum.photos/seed/emma2/400/700',
@@ -103,7 +97,6 @@ export const PROFILES: Profile[] = [
     distance: '7 miles away',
     bio: 'Software engineer who actually touches grass. Big fan of hiking & bad puns 🌲',
     interests: ['Hiking', 'Gaming', 'Tech', 'Comedy'],
-    photo: 'https://randomuser.me/api/portraits/men/18.jpg',
     photos: [
       'https://randomuser.me/api/portraits/men/18.jpg',
       'https://picsum.photos/seed/aiden2/400/700',
@@ -119,7 +112,6 @@ export const PROFILES: Profile[] = [
     distance: '15 miles away',
     bio: 'Marine biologist 🐠 Ocean lover. Let\'s explore the deep together.',
     interests: ['Ocean', 'Scuba', 'Fitness', 'Cooking'],
-    photo: 'https://randomuser.me/api/portraits/women/63.jpg',
     photos: [
       'https://randomuser.me/api/portraits/women/63.jpg',
       'https://picsum.photos/seed/zoe2/400/700',
@@ -136,7 +128,6 @@ export const PROFILES: Profile[] = [
     distance: '20 miles away',
     bio: 'Musician & dog dad. My golden retriever will love you first 🐶🎸',
     interests: ['Music', 'Dogs', 'Coffee', 'Concerts'],
-    photo: 'https://randomuser.me/api/portraits/men/41.jpg',
     photos: [
       'https://randomuser.me/api/portraits/men/41.jpg',
       'https://picsum.photos/seed/liam2/400/700',
@@ -152,7 +143,6 @@ export const PROFILES: Profile[] = [
     distance: '4 miles away',
     bio: 'Actor & yoga teacher. Here for a real connection, not just a good time 🙏',
     interests: ['Acting', 'Yoga', 'Meditation', 'Foodie'],
-    photo: 'https://randomuser.me/api/portraits/women/89.jpg',
     photos: [
       'https://randomuser.me/api/portraits/women/89.jpg',
       'https://picsum.photos/seed/ava2/400/700',
@@ -169,7 +159,6 @@ export const PROFILES: Profile[] = [
     distance: '6 miles away',
     bio: 'Filmmaker chasing stories and the perfect taco 🌮🎬',
     interests: ['Film', 'Tacos', 'Vinyl', 'Art'],
-    photo: 'https://randomuser.me/api/portraits/men/55.jpg',
     photos: [
       'https://randomuser.me/api/portraits/men/55.jpg',
       'https://picsum.photos/seed/noah2/400/700',

@@ -7,15 +7,14 @@ const { width: W } = Dimensions.get('window');
 
 type Props = {
   matches: Profile[];
+  onOpenChat: (profile: Profile) => void;
 };
 
 export type MatchesScreenHandle = {
   goToMessages: () => void;
 };
 
-const PLACEHOLDER_MESSAGES: { id: string; name: string; photo: string; last: string; time: string }[] = [];
-
-const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScreen({ matches }, ref) {
+const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScreen({ matches, onOpenChat }, ref) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
@@ -40,7 +39,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
     photo: m.photos[0],
     last: 'Say hello 👋',
     time: 'now',
-  })).concat(PLACEHOLDER_MESSAGES);
+  }));
 
   if (matches.length === 0) {
     return (
@@ -95,7 +94,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
             maxToRenderPerBatch={4}
             windowSize={5}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.matchCell} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.matchCell} activeOpacity={0.85} onPress={() => onOpenChat(item)}>
                 <Image source={{ uri: item.photos[0] }} style={styles.matchPhoto} />
                 <View style={styles.matchInfo}>
                   <Text style={styles.matchName}>{item.name}, {item.age}</Text>
@@ -119,7 +118,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
             maxToRenderPerBatch={6}
             windowSize={5}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.msgRow} activeOpacity={0.75}>
+              <TouchableOpacity style={styles.msgRow} activeOpacity={0.75} onPress={() => { const p = matches.find(m => m.id === item.id); if (p) onOpenChat(p); }}>
                 <Image source={{ uri: item.photo }} style={styles.msgAvatar} />
                 <View style={styles.msgBody}>
                   <View style={styles.msgTop}>
