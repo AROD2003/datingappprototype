@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
 	ActivityIndicator,
+	Alert,
 	Dimensions,
 	Image,
 	Modal,
@@ -325,6 +326,26 @@ export default function MyProfileScreen() {
 						<Text style={styles.logoutText}>Log out</Text>
 					</TouchableOpacity>
 				</View>
+
+				{/* Dev only — reset likes so seed profiles reappear in feed */}
+				{process.env.EXPO_PUBLIC_DEV_MODE === 'true' && (
+					<View style={styles.section}>
+						<TouchableOpacity
+							style={styles.devBtn}
+							activeOpacity={0.7}
+							onPress={async () => {
+								const { supabase } = await import('../lib/supabase');
+								const { error, count } = await supabase
+									.from('likes')
+									.delete({ count: 'exact' })
+									.eq('liker_id', profile.id);
+								Alert.alert('Reset likes', error ? `Error: ${error.message}` : `Deleted ${count} likes`);
+							}}
+						>
+							<Text style={styles.devBtnText}>DEV: Reset likes</Text>
+						</TouchableOpacity>
+					</View>
+				)}
 			</ScrollView>
 
 			{/* Preview modal — reflects live edit state when editing */}
@@ -691,5 +712,17 @@ const styles = StyleSheet.create({
 		color: '#fff',
 		fontSize: 13,
 		fontWeight: '500',
+	},
+	devBtn: {
+		borderWidth: 1,
+		borderColor: 'rgba(255,255,255,0.1)',
+		borderRadius: 14,
+		paddingVertical: 16,
+		alignItems: 'center',
+	},
+	devBtnText: {
+		color: 'rgba(255,255,255,0.3)',
+		fontSize: 13,
+		fontWeight: '600',
 	},
 });
