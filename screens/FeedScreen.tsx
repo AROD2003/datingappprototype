@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import { useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -12,27 +13,45 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProfileCard from '../components/ProfileCard';
-import { PROFILES, Profile } from '../data/profiles';
+import { Profile } from '../data/profiles';
+import { fetchFeedProfiles, recordLike, getDailyLikesUsed, FeedProfile } from '../lib/feedAlgorithm';
+import { useAuth } from '../context/AuthContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 const MAX_SCROLL_BACK = 2;
 const TAP_ZONE_BOTTOM_CUTOFF = 140;
+const DAILY_FREE_LIKES = 50;
 
 type Props = {
-  onMatch: (profile: Profile) => void;
+  onMatch: (profile: Profile, matchId: string) => void;
   onShootShot: (profile: Profile) => void;
 };
 
+function feedToProfile(fp: FeedProfile): Profile {
+  return {
+    id: fp.id,
+    name: fp.name,
+    age: fp.age,
+    bio: fp.bio,
+    photos: fp.photos,
+    interests: fp.interests,
+  };
+}
+
 export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const matchPlayer = useAudioPlayer(require('../assets/match.wav'));
 
-  // Animated scroll offset (negative = scrolled down)
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [likesUsed, setLikesUsed] = useState(0);
+
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollYVal = useRef(0);
   const dragStart = useRef(0);
   const panDistance = useRef(0);
 
-  // Which card we're committed to (updated immediately on swipe end)
   const currentIdx = useRef(0);
   const maxIdx = useRef(0);
 
@@ -51,6 +70,18 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const bannerActive = useRef(false);
 
   useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      fetchFeedProfiles(user.id),
+      getDailyLikesUsed(user.id),
+    ]).then(([feedProfiles, used]) => {
+      setProfiles(feedProfiles.map(feedToProfile));
+      setLikesUsed(used);
+      setLoading(false);
+    });
+  }, [user]);
+
+  useEffect(() => {
     const id = scrollY.addListener(({ value }) => { scrollYVal.current = value; });
     return () => {
       scrollY.removeListener(id);
@@ -59,40 +90,11 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     };
   }, []);
 
-  const playMatchSound = async () => {
-    let sound: Audio.Sound | null = null;
+  const playMatchSound = () => {
     try {
-      const result = await Audio.Sound.createAsync(require('../assets/match.wav'));
-      sound = result.sound;
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.isLoaded && status.didJustFinish) sound?.unloadAsync();
-      });
-    } catch {
-      sound?.unloadAsync();
-    }
-  };
-
-  const fireMatchHaptics = () => {
-    hapticTimers.current.forEach(clearTimeout);
-    hapticTimers.current = [];
-    const pattern = [0, 60, 110, 150, 180, 230, 270, 320, 380, 450];
-    const hapticStyles = [
-      Haptics.ImpactFeedbackStyle.Heavy,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      Haptics.ImpactFeedbackStyle.Medium,
-      Haptics.ImpactFeedbackStyle.Heavy,
-      Haptics.ImpactFeedbackStyle.Medium,
-      Haptics.ImpactFeedbackStyle.Medium,
-      Haptics.ImpactFeedbackStyle.Light,
-      Haptics.ImpactFeedbackStyle.Light,
-    ];
-    pattern.forEach((delay, i) => {
-      const timer = setTimeout(() => Haptics.impactAsync(hapticStyles[i]), delay);
-      hapticTimers.current.push(timer);
-    });
+      matchPlayer.seekTo(0);
+      matchPlayer.play();
+    } catch { /* ignore */ }
   };
 
   const dismissBannerInstant = () => {
@@ -147,17 +149,45 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     bannerTimer.current = setTimeout(() => hideLikedBanner(), 3000);
   };
 
-  const handleLike = (profile: Profile) => {
-    if (matchedIds.has(profile.id)) return;
+  const fireMatchHaptics = () => {
+    hapticTimers.current.forEach(clearTimeout);
+    hapticTimers.current = [];
+    const pattern = [0, 60, 110, 150, 180, 230, 270, 320, 380, 450];
+    const hapticStyles = [
+      Haptics.ImpactFeedbackStyle.Heavy,
+      Haptics.ImpactFeedbackStyle.Heavy,
+      Haptics.ImpactFeedbackStyle.Heavy,
+      Haptics.ImpactFeedbackStyle.Heavy,
+      Haptics.ImpactFeedbackStyle.Medium,
+      Haptics.ImpactFeedbackStyle.Heavy,
+      Haptics.ImpactFeedbackStyle.Medium,
+      Haptics.ImpactFeedbackStyle.Medium,
+      Haptics.ImpactFeedbackStyle.Light,
+      Haptics.ImpactFeedbackStyle.Light,
+    ];
+    pattern.forEach((delay, i) => {
+      const timer = setTimeout(() => Haptics.impactAsync(hapticStyles[i]), delay);
+      hapticTimers.current.push(timer);
+    });
+  };
+
+  const handleLike = async (profile: Profile) => {
+    if (!user || matchedIds.has(profile.id)) return;
     setMatchedIds(prev => new Set([...prev, profile.id]));
-    onMatch(profile);
-    playMatchSound();
-    fireMatchHaptics();
+
+    const result = await recordLike(user.id, profile.id);
+    setLikesUsed(prev => prev + 1);
+
+    if (result.matched) {
+      onMatch(profile, result.matchId ?? '');
+      playMatchSound();
+      fireMatchHaptics();
+    }
   };
 
   const snapToIndex = (idx: number) => {
-    const clamped = Math.max(0, Math.min(idx, PROFILES.length - 1));
-    currentIdx.current = clamped; // commit immediately so double-tap targets right card
+    const clamped = Math.max(0, Math.min(idx, profiles.length - 1));
+    currentIdx.current = clamped;
     if (clamped > maxIdx.current) {
       maxIdx.current = clamped;
       const newThreshold = Math.max(0, clamped - MAX_SCROLL_BACK);
@@ -184,12 +214,12 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       panDistance.current = Math.abs(e.translationY);
       if (panDistance.current > 8) dismissBannerInstant();
       const raw = dragStart.current + e.translationY;
-      const min = -(PROFILES.length - 1) * H;
+      const min = -(profiles.length - 1) * H;
       const backLimit = Math.max(0, lockedThresholdRef.current - 1);
       const max = -backLimit * H;
       if (raw > max && !wiggleFired.current && lockedThresholdRef.current > 0) {
         wiggleFired.current = true;
-        const lockedProfile = PROFILES[backLimit];
+        const lockedProfile = profiles[backLimit];
         if (lockedProfile) setWiggleSignals(prev => ({ ...prev, [lockedProfile.id]: (prev[lockedProfile.id] ?? 0) + 1 }));
       }
       scrollY.setValue(Math.max(min, Math.min(max, raw)));
@@ -198,13 +228,12 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       const vy = e.velocityY;
       const backLimit = Math.max(0, lockedThresholdRef.current - 1);
       let target = currentIdx.current;
-      if (vy < -300) target = Math.min(PROFILES.length - 1, currentIdx.current + 1);
+      if (vy < -300) target = Math.min(profiles.length - 1, currentIdx.current + 1);
       else if (vy > 300) target = Math.max(backLimit, currentIdx.current - 1);
       else target = Math.round(-scrollYVal.current / H);
       snapToIndex(Math.max(backLimit, target));
     });
 
-  // Fires simultaneously with pan — no UIScrollView to block it
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .maxDuration(300)
@@ -212,23 +241,38 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     .onStart((e) => {
       if (e.y > H - TAP_ZONE_BOTTOM_CUTOFF) return;
       if (e.x < 60 || e.x > W - 60) return;
-      // Ignore if the finger moved enough to be a scroll, not a tap
       if (panDistance.current > 20) return;
-      // currentIdx is already the destination card even mid-animation
-      const profile = PROFILES[currentIdx.current];
+      const profile = profiles[currentIdx.current];
       if (!profile) return;
-      // Don't like locked profiles
       if (currentIdx.current < lockedThresholdRef.current) return;
-      // Show banner if already liked
       if (likedIds.current.has(profile.id)) {
         showLikedBanner();
         return;
       }
+      if (likesUsed >= DAILY_FREE_LIKES) return;
       likedIds.current.add(profile.id);
       setLikeSignals(prev => ({ ...prev, [profile.id]: (prev[profile.id] ?? 0) + 1 }));
     });
 
   const composed = Gesture.Simultaneous(pan, doubleTap);
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color="#FF2D55" size="large" />
+      </View>
+    );
+  }
+
+  if (profiles.length === 0) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.emptyIcon}>👀</Text>
+        <Text style={styles.emptyTitle}>You've seen everyone</Text>
+        <Text style={styles.emptySub}>Check back later for new people nearby</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -242,6 +286,12 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
           <Text style={styles.logo}>RT</Text>
         </View>
       </View>
+
+      {likesUsed >= DAILY_FREE_LIKES && (
+        <View style={[styles.limitBanner, { top: insets.top + 50 }]} pointerEvents="none">
+          <Text style={styles.limitText}>Daily like limit reached · Upgrade for unlimited</Text>
+        </View>
+      )}
 
       <Animated.View
         style={[styles.likedBanner, { paddingTop: insets.top + 85, opacity: bannerOpacity, transform: [{ translateY: bannerY }] }]}
@@ -259,10 +309,8 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
       <GestureDetector gesture={composed}>
         <View style={styles.scrollArea}>
-          <Animated.View
-            style={[styles.track, { transform: [{ translateY: scrollY }] }]}
-          >
-            {PROFILES.map((profile, index) => (
+          <Animated.View style={[styles.track, { transform: [{ translateY: scrollY }] }]}>
+            {profiles.map((profile, index) => (
               <View key={profile.id} style={[styles.cardSlot, { top: index * H }]}>
                 <ProfileCard
                   profile={profile}
@@ -284,12 +332,49 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  centered: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyIcon: { fontSize: 52 },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  emptySub: {
+    color: '#555',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 20,
+  },
   topBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
     paddingHorizontal: 14,
     paddingBottom: 10,
     zIndex: 20,
+  },
+  limitBanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 25,
+    alignItems: 'center',
+  },
+  limitText: {
+    backgroundColor: 'rgba(255,45,85,0.9)',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   scrollArea: {
     flex: 1,
@@ -300,7 +385,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: PROFILES.length * H,
   },
   cardSlot: {
     position: 'absolute',

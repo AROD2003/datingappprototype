@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFonts, LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -8,6 +8,7 @@ import { ProfileProvider, useProfile } from './context/ProfileContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { supabase } from './lib/supabase';
 import { Profile } from './data/profiles';
+import { registerPushToken, sendPushNotification } from './lib/notifications';
 import FeedScreen from './screens/FeedScreen';
 import MatchesScreen, { MatchesScreenHandle } from './screens/MatchesScreen';
 import MyProfileScreen from './screens/MyProfileScreen';
@@ -89,29 +90,52 @@ function BottomBar({
 
 function Main() {
 	const { user } = useAuth();
+	const { profile } = useProfile();
 	const [activeTab, setActiveTab] = useState<Tab>('feed');
 	const [matches, setMatches] = useState<Profile[]>([]);
 	const [matchIds, setMatchIds] = useState<Record<string, string>>({});
+
+	useEffect(() => {
+		if (!user) return;
+		registerPushToken(user.id);
+		supabase
+			.from('matches')
+			.select('id, user1_id, user2_id')
+			.or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+			.then(async ({ data: matchRows }) => {
+				if (!matchRows || matchRows.length === 0) return;
+				const rows = matchRows as { id: string; user1_id: string; user2_id: string }[];
+				const otherIds = rows.map(m =>
+					m.user1_id === user.id ? m.user2_id : m.user1_id
+				);
+				const { data: profileRows } = await supabase
+					.from('profiles')
+					.select('id, name, age, bio, photos, interests')
+					.in('id', otherIds);
+				if (!profileRows) return;
+				const idMap: Record<string, string> = {};
+				rows.forEach(m => {
+					const otherId = m.user1_id === user.id ? m.user2_id : m.user1_id;
+					idMap[otherId] = m.id;
+				});
+				setMatches(profileRows as Profile[]);
+				setMatchIds(idMap);
+			});
+	}, [user]);
+
 	const [chatProfile, setChatProfile] = useState<Profile | null>(null);
 	const matchesRef = useRef<MatchesScreenHandle>(null);
 
-	const handleMatch = async (profile: Profile) => {
+	const handleMatch = (matched: Profile, matchId: string) => {
 		setMatches(prev => {
-			if (prev.find(p => p.id === profile.id)) return prev;
-			return [profile, ...prev];
+			if (prev.find(p => p.id === matched.id)) return prev;
+			return [matched, ...prev];
 		});
-		if (user) {
-			try {
-				const { data } = await supabase
-					.from('matches')
-					.insert({ user1_id: user.id, user2_id: profile.id })
-					.select('id')
-					.single();
-				if (data?.id) {
-					setMatchIds(prev => ({ ...prev, [profile.id]: data.id }));
-				}
-			} catch { /* dummy profile — no Supabase match record */ }
+		if (matchId) {
+			setMatchIds(prev => ({ ...prev, [matched.id]: matchId }));
 		}
+		// Notify the other person they got a match
+		sendPushNotification(matched.id, "You've got a match! 💘", `${profile?.name ?? 'Someone'} liked you back`);
 	};
 
 	const handleShootShot = (_profile: Profile) => {
@@ -138,6 +162,9 @@ function Main() {
 				<MatchesScreen
 					ref={matchesRef}
 					matches={matches}
+					matchIds={matchIds}
+					isPremium={profile?.is_premium ?? false}
+					userId={user?.id ?? ''}
 					onOpenChat={setChatProfile}
 				/>
 			)}

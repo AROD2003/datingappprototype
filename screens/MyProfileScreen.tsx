@@ -18,10 +18,11 @@ import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
 import NumberPicker from '../components/NumberPicker';
 import { INTERESTS_LIST, DISTANCES } from '../data/constants';
+import { uploadPhoto, isLocalUri } from '../lib/storage';
 
 export default function MyProfileScreen() {
 	const insets = useSafeAreaInsets();
-	const { signOut } = useAuth();
+	const { signOut, user } = useAuth();
 	const { profile, updateProfile } = useProfile();
 
 	const [editing, setEditing] = useState(false);
@@ -35,6 +36,7 @@ export default function MyProfileScreen() {
 	const [ageMin, setAgeMin] = useState(18);
 	const [ageMax, setAgeMax] = useState(35);
 	const [photos, setPhotos] = useState<(string | null)[]>(Array(6).fill(null));
+	const [photoBase64s, setPhotoBase64s] = useState<(string | null)[]>(Array(6).fill(null));
 	const scrollRef = useRef<ScrollView>(null);
 
 	const TILE_SIZE = (Dimensions.get('window').width - 40 - 16) / 3;
@@ -50,13 +52,30 @@ export default function MyProfileScreen() {
 		setAgeMax(profile.age_max ?? 35);
 		const existing = profile.photos ?? [];
 		setPhotos([...existing, ...Array(6 - existing.length).fill(null)].slice(0, 6));
+		setPhotoBase64s(Array(6).fill(null));
 		setEditing(true);
 	};
 
-	const cancelEdit = () => setEditing(false);
+	const cancelEdit = () => { setEditing(false); setPhotoBase64s(Array(6).fill(null)); };
 
 	const saveEdit = async () => {
+		if (!user) return;
 		setSaving(true);
+
+		// Upload any locally picked photos to Supabase Storage
+		const finalPhotos = await Promise.all(
+			photos.map(async (uri, i) => {
+				if (!uri) return null;
+				if (isLocalUri(uri)) {
+					const base64 = photoBase64s[i];
+						if (!base64) return uri;
+					const uploaded = await uploadPhoto(user.id, uri, base64);
+					return uploaded ?? uri;
+				}
+				return uri; // already a remote URL
+			})
+		);
+
 		await updateProfile({
 			name: name.trim(),
 			bio: bio.trim(),
@@ -64,7 +83,7 @@ export default function MyProfileScreen() {
 			distance_preference: distance,
 			age_min: ageMin,
 			age_max: ageMax,
-			photos: photos.filter(Boolean) as string[],
+			photos: finalPhotos.filter(Boolean) as string[],
 		});
 		setSaving(false);
 		setEditing(false);
@@ -76,11 +95,18 @@ export default function MyProfileScreen() {
 			allowsEditing: true,
 			aspect: [3, 4],
 			quality: 0.85,
+			base64: true,
 		});
 		if (!result.canceled && result.assets[0]) {
+			const asset = result.assets[0];
 			setPhotos(prev => {
 				const next = [...prev];
-				next[index] = result.assets[0].uri;
+				next[index] = asset.uri;
+				return next;
+			});
+			setPhotoBase64s(prev => {
+				const next = [...prev];
+				next[index] = asset.base64 ?? null;
 				return next;
 			});
 		}
