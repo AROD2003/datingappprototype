@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useFonts, LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+
+const { width: SW, height: SH } = Dimensions.get('window');
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProfileProvider, useProfile } from './context/ProfileContext';
@@ -25,12 +28,17 @@ function BottomBar({
 	active,
 	onPress,
 	matchCount,
+	heartPulse,
+	onHeartMeasured,
 }: {
 	active: Tab;
 	onPress: (t: Tab) => void;
 	matchCount: number;
+	heartPulse: Animated.Value;
+	onHeartMeasured: (x: number, y: number) => void;
 }) {
 	const insets = useSafeAreaInsets();
+	const heartRef = useRef<any>(null);
 	const tabs: { id: Tab; icon: string; activeIcon: string; label: string }[] = [
 		{ id: 'feed', icon: '🔥', activeIcon: '🔥', label: 'Discover' },
 		{ id: 'matches', icon: '🤍', activeIcon: '🤍', label: 'Matches' },
@@ -66,9 +74,18 @@ function BottomBar({
 								<Text style={styles.discoverText}>le</Text>
 							</View>
 						) : tab.id === 'matches' ? (
-							<Text style={[styles.matchHeart, !(active === tab.id) && { opacity: 0.4 }]}>
+							<Animated.Text
+								ref={heartRef}
+								collapsable={false}
+								onLayout={() => {
+									heartRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
+										onHeartMeasured(x + w / 2, y + h / 2);
+									});
+								}}
+								style={[styles.matchHeart, !(active === tab.id) && { opacity: 0.4 }, { transform: [{ scale: heartPulse }] }]}
+							>
 								♥
-							</Text>
+							</Animated.Text>
 						) : (
 							<Text style={[styles.tabIcon, active === tab.id && styles.tabIconActive]}>
 								{tab.icon}
@@ -97,6 +114,37 @@ function Main() {
 	const [activeTab, setActiveTab] = useState<Tab>('feed');
 	const [matches, setMatches] = useState<Profile[]>([]);
 	const [matchIds, setMatchIds] = useState<Record<string, string>>({});
+	const heartPulse = useRef(new Animated.Value(1)).current;
+	const heartPos = useRef({ x: SW / 2, y: SH - 58 });
+
+	const handleHeartMeasured = useCallback((x: number, y: number) => {
+		heartPos.current = { x, y };
+	}, []);
+
+	const stopHeartPulse = useCallback(() => {
+		heartPulse.stopAnimation();
+		heartPulse.setValue(1);
+	}, []);
+
+	const pulseMatchHeart = useCallback(() => {
+		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+		let snapFired = false;
+		let peaked = false;
+		const listenerId = heartPulse.addListener(({ value }) => {
+			if (!peaked && value >= 2.0) peaked = true;
+			if (peaked && !snapFired && value <= 1.05) {
+				snapFired = true;
+				heartPulse.removeListener(listenerId);
+				Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+			}
+		});
+
+		Animated.sequence([
+			Animated.spring(heartPulse, { toValue: 2.2, friction: 4, tension: 600, useNativeDriver: true }),
+			Animated.spring(heartPulse, { toValue: 1, friction: 6, tension: 500, useNativeDriver: true }),
+		]).start(() => heartPulse.removeListener(listenerId));
+	}, []);
 
 	useEffect(() => {
 		if (!user) return;
@@ -138,7 +186,6 @@ function Main() {
 		if (matchId) {
 			setMatchIds(prev => ({ ...prev, [matched.id]: matchId }));
 		}
-		// Notify the other person they got a match
 		sendPushNotification(matched.id, "You've got a match! 💘", `${profile?.name ?? 'Someone'} liked you back`);
 	};
 
@@ -169,7 +216,7 @@ function Main() {
 
 	return (
 		<View style={styles.root}>
-			{activeTab === 'feed' && <FeedScreen onMatch={handleMatch} onShootShot={handleShootShot} />}
+			{activeTab === 'feed' && <FeedScreen onMatch={handleMatch} onShootShot={handleShootShot} onMatchArrived={pulseMatchHeart} heartPos={heartPos.current} onSwipe={stopHeartPulse} />}
 			{activeTab === 'matches' && (
 				<MatchesScreen
 					ref={matchesRef}
@@ -186,7 +233,10 @@ function Main() {
 				active={activeTab}
 				onPress={setActiveTab}
 				matchCount={matches.length}
+				heartPulse={heartPulse}
+				onHeartMeasured={handleHeartMeasured}
 			/>
+
 		</View>
 	);
 }

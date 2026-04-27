@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import MatchExplosion from './MatchExplosion';
 import * as Haptics from 'expo-haptics';
 import { memo, useEffect, useRef, useState } from 'react';
 import {
@@ -11,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MatchExplosion from './MatchExplosion';
 import { Profile } from '../data/profiles';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -30,9 +30,11 @@ type Props = {
   onArrowPress?: () => void;
   topInset?: number;
   storyBarOpacity?: Animated.Value;
+  onMatchArrived?: () => void;
+  heartPos?: { x: number; y: number };
 };
 
-function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot, onArrowPress, topInset = 44, storyBarOpacity }: Props) {
+function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot, onArrowPress, topInset = 44, storyBarOpacity, onMatchArrived, heartPos }: Props) {
   const [showInfo, setShowInfo] = useState(false);
   const [showExplosion, setShowExplosion] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -230,6 +232,8 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
             profile={profile}
             onDismiss={() => setShowExplosion(false)}
             onShootShot={() => { setShowExplosion(false); onShootShot?.(); }}
+            onArrived={onMatchArrived}
+            heartPos={heartPos}
           />
         )}
 

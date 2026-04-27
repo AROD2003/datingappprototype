@@ -25,6 +25,9 @@ const DAILY_FREE_LIKES = 50;
 type Props = {
   onMatch: (profile: Profile, matchId: string) => void;
   onShootShot: (profile: Profile) => void;
+  onMatchArrived?: () => void;
+  heartPos?: { x: number; y: number };
+  onSwipe?: () => void;
 };
 
 function feedToProfile(fp: FeedProfile): Profile {
@@ -38,7 +41,7 @@ function feedToProfile(fp: FeedProfile): Profile {
   };
 }
 
-export default function FeedScreen({ onMatch, onShootShot }: Props) {
+export default function FeedScreen({ onMatch, onShootShot, onMatchArrived, heartPos, onSwipe }: Props) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const matchPlayer = useAudioPlayer(require('../assets/match.wav'));
@@ -206,6 +209,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
   const snapToIndex = (idx: number) => {
     const clamped = Math.max(0, Math.min(idx, profiles.length - 1));
+    if (clamped !== currentIdx.current) onSwipe?.();
     currentIdx.current = clamped;
     if (clamped > maxIdx.current) {
       maxIdx.current = clamped;
@@ -321,7 +325,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
           <Text style={styles.likedBannerText}>ALREADY L</Text>
           <View style={styles.likedBannerIWrap}>
             <Text style={styles.likedBannerHeart}>♥</Text>
-            <Text style={styles.likedBannerText}>I</Text>
+            <Text style={[styles.likedBannerText, styles.likedBannerI]}>I</Text>
           </View>
           <Text style={styles.likedBannerText}>KED!</Text>
         </View>
@@ -343,6 +347,8 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
                   onArrowPress={() => { lastArrowTap.current = Date.now(); }}
                   topInset={insets.top + 36}
                   storyBarOpacity={headerOpacity}
+                  onMatchArrived={onMatchArrived}
+                  heartPos={heartPos}
                 />
               </View>
             ))}
@@ -447,6 +453,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'LilitaOne_400Regular',
     letterSpacing: 2,
+  },
+  likedBannerI: {
+    fontFamily: 'Helvetica Neue',
+    fontWeight: '700',
   },
   logoRow: {
     flexDirection: 'row',
