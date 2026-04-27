@@ -14,6 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useProfile } from '../context/ProfileContext';
+import { sendPushNotification } from '../lib/notifications';
 import { Profile } from '../data/profiles';
 
 type Message = {
@@ -32,6 +34,7 @@ type Props = {
 export default function ChatScreen({ matchProfile, matchId, onBack }: Props) {
 	const insets = useSafeAreaInsets();
 	const { user } = useAuth();
+	const { profile } = useProfile();
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [text, setText] = useState('');
 	const [sending, setSending] = useState(false);
@@ -75,6 +78,11 @@ export default function ChatScreen({ matchProfile, matchId, onBack }: Props) {
 			sender_id: user.id,
 			content,
 		});
+		sendPushNotification(
+			matchProfile.id,
+			profile?.name ?? 'New message',
+			content,
+		);
 		setSending(false);
 	};
 

@@ -2,12 +2,12 @@ export type Profile = {
   id: string;
   name: string;
   age: number;
-  location: string;
-  distance: string;
   bio: string;
   interests: string[];
   photos: string[];
-  verified: boolean;
+  location?: string;
+  distance?: string;
+  verified?: boolean;
 };
 
 export const PROFILES: Profile[] = [

@@ -14,6 +14,7 @@ export type UserProfile = {
 	distance_preference: number;
 	age_min: number;
 	age_max: number;
+	is_premium: boolean;
 };
 
 type ProfileContextType = {
@@ -33,6 +34,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
 	useEffect(() => {
 		if (!user) { setLoading(false); return; }
+		setLoading(true);
 		supabase
 			.from('profiles')
 			.select('*')

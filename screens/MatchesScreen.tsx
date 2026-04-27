@@ -1,12 +1,35 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Dimensions, FlatList, Image, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Profile } from '../data/profiles';
+import { supabase } from '../lib/supabase';
 
 const { width: W } = Dimensions.get('window');
 
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  return `${Math.floor(diffHours / 24)}d`;
+}
+
+type LikedYouProfile = {
+  id: string;
+  name: string;
+  age: number;
+  photos: string[];
+};
+
 type Props = {
   matches: Profile[];
+  matchIds: Record<string, string>;
+  isPremium: boolean;
+  userId: string;
   onOpenChat: (profile: Profile) => void;
 };
 
@@ -14,10 +37,81 @@ export type MatchesScreenHandle = {
   goToMessages: () => void;
 };
 
-const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScreen({ matches, onOpenChat }, ref) {
+const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScreen({ matches, matchIds, isPremium, userId, onOpenChat }, ref) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
+  const [lastMessages, setLastMessages] = useState<Record<string, { text: string; time: string }>>({});
+  const [likedYou, setLikedYou] = useState<LikedYouProfile[]>([]);
+
+  // Fetch last message for each match, then subscribe to new ones
+  useEffect(() => {
+    const matchIdList = Object.values(matchIds);
+    if (matchIdList.length === 0) return;
+
+    // Fetch the most recent message per match in one query
+    supabase
+      .from('messages')
+      .select('match_id, content, created_at')
+      .in('match_id', matchIdList)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (!data) return;
+        const seen = new Set<string>();
+        const latest: Record<string, { text: string; time: string }> = {};
+        data.forEach((msg: { match_id: string; content: string; created_at: string }) => {
+          if (!seen.has(msg.match_id)) {
+            seen.add(msg.match_id);
+            latest[msg.match_id] = {
+              text: msg.content,
+              time: formatTime(msg.created_at),
+            };
+          }
+        });
+        setLastMessages(latest);
+      });
+
+    // Realtime: update last message when a new one arrives
+    const channel = supabase
+      .channel('matches-last-msg')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+      }, (payload) => {
+        const msg = payload.new as { match_id: string; content: string; created_at: string };
+        if (!matchIdList.includes(msg.match_id)) return;
+        setLastMessages(prev => ({
+          ...prev,
+          [msg.match_id]: { text: msg.content, time: formatTime(msg.created_at) },
+        }));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [matchIds]);
+
+  // Fetch profiles who liked the current user (excluding mutual matches)
+  useEffect(() => {
+    if (!userId) return;
+    const matchedIds = new Set(matches.map(m => m.id));
+    supabase
+      .from('likes')
+      .select('liker_id')
+      .eq('liked_id', userId)
+      .then(async ({ data }) => {
+        if (!data || data.length === 0) return;
+        const likerIds = data
+          .map((r: { liker_id: string }) => r.liker_id)
+          .filter((id: string) => !matchedIds.has(id));
+        if (likerIds.length === 0) return;
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, name, age, photos')
+          .in('id', likerIds);
+        if (profiles) setLikedYou(profiles as LikedYouProfile[]);
+      });
+  }, [userId, matches]);
 
   const goTo = (idx: 0 | 1 | 2) => {
     scrollRef.current?.scrollTo({ x: idx * W, animated: true });
@@ -33,13 +127,17 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
     setActiveTab(idx as 0 | 1 | 2);
   };
 
-  const messages = matches.map(m => ({
-    id: m.id,
-    name: m.name,
-    photo: m.photos[0],
-    last: 'Say hello 👋',
-    time: 'now',
-  }));
+  const messages = matches.map(m => {
+    const matchId = matchIds[m.id];
+    const last = matchId ? lastMessages[matchId] : undefined;
+    return {
+      id: m.id,
+      name: m.name,
+      photo: m.photos[0],
+      last: last?.text ?? 'Say hello 👋',
+      time: last?.time ?? 'now',
+    };
+  });
 
   if (matches.length === 0) {
     return (
@@ -58,7 +156,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
         {([
           { label: 'Matches', count: matches.length },
           { label: 'Messages', count: 0 },
-          { label: 'Liked You', count: 0 },
+          { label: 'Liked You', count: likedYou.length },
         ] as const).map(({ label, count }, idx) => (
           <TouchableOpacity key={label} style={styles.tabItem} onPress={() => goTo(idx as 0 | 1 | 2)} activeOpacity={0.7}>
             <View style={styles.tabLabelRow}>
@@ -98,7 +196,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
                 <Image source={{ uri: item.photos[0] }} style={styles.matchPhoto} />
                 <View style={styles.matchInfo}>
                   <Text style={styles.matchName}>{item.name}, {item.age}</Text>
-                  <Text style={styles.matchDist}>{item.distance}</Text>
+                  {item.distance ? <Text style={styles.matchDist}>{item.distance}</Text> : null}
                 </View>
                 <View style={styles.newBadge}>
                   <Text style={styles.newBadgeText}>NEW</Text>
@@ -134,11 +232,45 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
 
         {/* Liked You page */}
         <View style={styles.page}>
-          <View style={styles.likedYouEmpty}>
-            <Text style={styles.likedYouIcon}>💘</Text>
-            <Text style={styles.likedYouTitle}>See who likes you</Text>
-            <Text style={styles.likedYouSub}>People who liked you will appear here</Text>
-          </View>
+          {likedYou.length === 0 ? (
+            <View style={styles.likedYouEmpty}>
+              <Text style={styles.likedYouIcon}>💘</Text>
+              <Text style={styles.likedYouTitle}>No likes yet</Text>
+              <Text style={styles.likedYouSub}>People who liked you will appear here</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={likedYou}
+              keyExtractor={item => item.id}
+              numColumns={2}
+              contentContainerStyle={styles.grid}
+              initialNumToRender={6}
+              renderItem={({ item }) => (
+                <View style={styles.matchCell}>
+                  <Image source={{ uri: item.photos[0] }} style={[styles.matchPhoto, !isPremium && styles.lockedPhoto]} blurRadius={isPremium ? 0 : 18} />
+                  {!isPremium && (
+                    <View style={styles.lockedOverlay}>
+                      <Text style={styles.lockedEmoji}>🔒</Text>
+                      <Text style={styles.lockedLabel}>Upgrade to see</Text>
+                    </View>
+                  )}
+                  {isPremium && (
+                    <View style={styles.matchInfo}>
+                      <Text style={styles.matchName}>{item.name}, {item.age}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            />
+          )}
+          {!isPremium && likedYou.length > 0 && (
+            <View style={styles.upgradeBanner}>
+              <Text style={styles.upgradeBannerText}>Upgrade to see everyone who liked you</Text>
+              <TouchableOpacity style={styles.upgradeBtn} activeOpacity={0.8}>
+                <Text style={styles.upgradeBtnText}>Upgrade · $9.99/mo</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -317,6 +449,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 32,
+  },
+  lockedPhoto: {
+    opacity: 0.55,
+  },
+  lockedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  lockedEmoji: {
+    fontSize: 36,
+  },
+  lockedLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  upgradeBanner: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(255,45,85,0.95)',
+    borderRadius: 20,
+    padding: 18,
+    alignItems: 'center',
+    gap: 12,
+  },
+  upgradeBannerText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  upgradeBtn: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  upgradeBtnText: {
+    color: '#FF2D55',
+    fontSize: 15,
+    fontWeight: '800',
   },
   empty: {
     flex: 1,

@@ -205,7 +205,7 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
             </Text>
           </View>
 
-          <Text style={styles.location}>📍 {profile.distance}</Text>
+          {profile.distance && <Text style={styles.location}>📍 {profile.distance}</Text>}
 
           {showInfo && (
             <>
