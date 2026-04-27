@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAudioPlayer } from 'expo-audio';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
@@ -43,6 +43,10 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const { user } = useAuth();
   const matchPlayer = useAudioPlayer(require('../assets/match.wav'));
 
+  useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true });
+  }, []);
+
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [likesUsed, setLikesUsed] = useState(0);
@@ -63,9 +67,11 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const [wiggleSignals, setWiggleSignals] = useState<{ [id: string]: number }>({});
   const hapticTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wiggleFired = useRef(false);
+  const lastArrowTap = useRef(0);
 
   const bannerY = useRef(new Animated.Value(-200)).current;
   const bannerOpacity = useRef(new Animated.Value(1)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerActive = useRef(false);
 
@@ -90,9 +96,9 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     };
   }, []);
 
-  const playMatchSound = () => {
+  const playMatchSound = async () => {
     try {
-      matchPlayer.seekTo(0);
+      await matchPlayer.seekTo(0);
       matchPlayer.play();
     } catch { /* ignore */ }
   };
@@ -102,6 +108,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     bannerY.stopAnimation();
     bannerY.setValue(-200);
     bannerOpacity.setValue(1);
+    headerOpacity.setValue(1);
     bannerActive.current = false;
   };
 
@@ -128,6 +135,11 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
+        Animated.timing(headerOpacity, {
+          toValue: 1,
+          duration: 260,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start(() => {
       bannerOpacity.setValue(1);
@@ -140,12 +152,19 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     bannerActive.current = true;
     bannerY.setValue(-200);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Animated.spring(bannerY, {
-      toValue: 0,
-      tension: 280,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.spring(bannerY, {
+        toValue: 0,
+        tension: 280,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(headerOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
     bannerTimer.current = setTimeout(() => hideLikedBanner(), 3000);
   };
 
@@ -173,12 +192,12 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
   const handleLike = async (profile: Profile) => {
     if (!user || matchedIds.has(profile.id)) return;
-    setMatchedIds(prev => new Set([...prev, profile.id]));
 
     const result = await recordLike(user.id, profile.id);
     setLikesUsed(prev => prev + 1);
 
     if (result.matched) {
+      setMatchedIds(prev => new Set([...prev, profile.id]));
       onMatch(profile, result.matchId ?? '');
       playMatchSound();
       fireMatchHaptics();
@@ -240,8 +259,9 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     .runOnJS(true)
     .onStart((e) => {
       if (e.y > H - TAP_ZONE_BOTTOM_CUTOFF) return;
-      if (e.x < 60 || e.x > W - 60) return;
+      if (e.x < 100 || e.x > W - 100) return;
       if (panDistance.current > 20) return;
+      if (Date.now() - lastArrowTap.current < 400) return;
       const profile = profiles[currentIdx.current];
       if (!profile) return;
       if (currentIdx.current < lockedThresholdRef.current) return;
@@ -276,7 +296,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="none">
+      <Animated.View style={[styles.topBar, { paddingTop: insets.top + 8, opacity: headerOpacity }]} pointerEvents="none">
         <View style={styles.logoRow}>
           <Text style={styles.logo}>V</Text>
           <View style={styles.iWrap}>
@@ -285,7 +305,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
           </View>
           <Text style={styles.logo}>RT</Text>
         </View>
-      </View>
+      </Animated.View>
 
       {likesUsed >= DAILY_FREE_LIKES && (
         <View style={[styles.limitBanner, { top: insets.top + 50 }]} pointerEvents="none">
@@ -294,7 +314,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       )}
 
       <Animated.View
-        style={[styles.likedBanner, { paddingTop: insets.top + 85, opacity: bannerOpacity, transform: [{ translateY: bannerY }] }]}
+        style={[styles.likedBanner, { paddingTop: insets.top + 108, opacity: bannerOpacity, transform: [{ translateY: bannerY }] }]}
         pointerEvents="none"
       >
         <View style={styles.likedBannerRow}>
@@ -320,6 +340,9 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
                   matched={matchedIds.has(profile.id)}
                   locked={index < lockedThreshold}
                   likeSignal={likeSignals[profile.id]}
+                  onArrowPress={() => { lastArrowTap.current = Date.now(); }}
+                  topInset={insets.top + 36}
+                  storyBarOpacity={headerOpacity}
                 />
               </View>
             ))}

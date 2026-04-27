@@ -15,6 +15,7 @@ export type UserProfile = {
 	age_min: number;
 	age_max: number;
 	is_premium: boolean;
+	hidden: boolean;
 };
 
 type ProfileContextType = {

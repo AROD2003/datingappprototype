@@ -69,6 +69,8 @@ export default function OnboardingScreen() {
 			distance_preference: distance,
 			age_min: ageMin,
 			age_max: ageMax,
+			is_premium: false,
+			hidden: false,
 		});
 		if (error) {
 			setError(error);

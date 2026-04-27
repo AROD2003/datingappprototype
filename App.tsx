@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFonts, LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProfileProvider, useProfile } from './context/ProfileContext';
@@ -13,6 +14,7 @@ import FeedScreen from './screens/FeedScreen';
 import MatchesScreen, { MatchesScreenHandle } from './screens/MatchesScreen';
 import MyProfileScreen from './screens/MyProfileScreen';
 import ChatScreen from './screens/ChatScreen';
+import SettingsScreen from './screens/SettingsScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import LoginScreen from './screens/auth/LoginScreen';
 import SignupScreen from './screens/auth/SignupScreen';
@@ -28,6 +30,7 @@ function BottomBar({
 	onPress: (t: Tab) => void;
 	matchCount: number;
 }) {
+	const insets = useSafeAreaInsets();
 	const tabs: { id: Tab; icon: string; activeIcon: string; label: string }[] = [
 		{ id: 'feed', icon: '🔥', activeIcon: '🔥', label: 'Discover' },
 		{ id: 'matches', icon: '🤍', activeIcon: '🤍', label: 'Matches' },
@@ -35,7 +38,7 @@ function BottomBar({
 	];
 
 	return (
-		<View style={[styles.bar, { paddingBottom: 12 }]}>
+		<View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
 			{tabs.map(tab => (
 				<TouchableOpacity
 					key={tab.id}
@@ -124,6 +127,7 @@ function Main() {
 	}, [user]);
 
 	const [chatProfile, setChatProfile] = useState<Profile | null>(null);
+	const [settingsOpen, setSettingsOpen] = useState(false);
 	const matchesRef = useRef<MatchesScreenHandle>(null);
 
 	const handleMatch = (matched: Profile, matchId: string) => {
@@ -155,6 +159,14 @@ function Main() {
 		);
 	}
 
+	if (settingsOpen) {
+		return (
+			<View style={styles.root}>
+				<SettingsScreen onBack={() => setSettingsOpen(false)} />
+			</View>
+		);
+	}
+
 	return (
 		<View style={styles.root}>
 			{activeTab === 'feed' && <FeedScreen onMatch={handleMatch} onShootShot={handleShootShot} />}
@@ -168,7 +180,7 @@ function Main() {
 					onOpenChat={setChatProfile}
 				/>
 			)}
-			{activeTab === 'profile' && <MyProfileScreen />}
+			{activeTab === 'profile' && <MyProfileScreen onOpenSettings={() => setSettingsOpen(true)} />}
 
 			<BottomBar
 				active={activeTab}
@@ -231,7 +243,7 @@ const styles = StyleSheet.create({
 	},
 	bar: {
 		position: 'absolute',
-		bottom: 18,
+		bottom: 10,
 		left: 20,
 		right: 20,
 		flexDirection: 'row',

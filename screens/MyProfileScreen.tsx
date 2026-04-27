@@ -21,7 +21,11 @@ import NumberPicker from '../components/NumberPicker';
 import { INTERESTS_LIST, DISTANCES } from '../data/constants';
 import { uploadPhoto, isLocalUri } from '../lib/storage';
 
-export default function MyProfileScreen() {
+type Props = {
+	onOpenSettings: () => void;
+};
+
+export default function MyProfileScreen({ onOpenSettings }: Props) {
 	const insets = useSafeAreaInsets();
 	const { signOut, user } = useAuth();
 	const { profile, updateProfile } = useProfile();
@@ -29,9 +33,11 @@ export default function MyProfileScreen() {
 	const [editing, setEditing] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
+	const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0);
 
 	const [name, setName] = useState('');
 	const [bio, setBio] = useState('');
+	const [lookingFor, setLookingFor] = useState<'Men' | 'Women' | 'Everyone'>('Everyone');
 	const [interests, setInterests] = useState<string[]>([]);
 	const [distance, setDistance] = useState(25);
 	const [ageMin, setAgeMin] = useState(18);
@@ -47,6 +53,7 @@ export default function MyProfileScreen() {
 	const startEdit = () => {
 		setName(profile.name);
 		setBio(profile.bio ?? '');
+		setLookingFor((profile.looking_for as 'Men' | 'Women' | 'Everyone') ?? 'Everyone');
 		setInterests(profile.interests ?? []);
 		setDistance(profile.distance_preference ?? 25);
 		setAgeMin(profile.age_min ?? 18);
@@ -80,6 +87,7 @@ export default function MyProfileScreen() {
 		await updateProfile({
 			name: name.trim(),
 			bio: bio.trim(),
+			looking_for: lookingFor,
 			interests,
 			distance_preference: distance,
 			age_min: ageMin,
@@ -144,7 +152,14 @@ export default function MyProfileScreen() {
 			>
 				{/* Header */}
 				<View style={styles.headerRow}>
-					<Text style={styles.heading}>Profile</Text>
+					<View style={styles.headingRow}>
+						<Text style={styles.heading}>Profile</Text>
+						{!editing && (
+							<TouchableOpacity onPress={onOpenSettings} style={styles.gearBtn} activeOpacity={0.7}>
+								<Text style={styles.gearIcon}>⚙️</Text>
+							</TouchableOpacity>
+						)}
+					</View>
 					{editing ? (
 						<View style={styles.editActions}>
 							<TouchableOpacity onPress={cancelEdit} style={styles.cancelBtn}>
@@ -171,23 +186,20 @@ export default function MyProfileScreen() {
 
 				{/* Photo grid */}
 				<View style={styles.photoGrid}>
-					{Array.from({ length: 6 }, (_, i) => {
-						const uri = editing ? photos[i] : displayPhotos[i];
-						return (
+					{editing ? (
+						Array.from({ length: 6 }, (_, i) => (
 							<TouchableOpacity
 								key={i}
 								style={[styles.photoTile, { width: TILE_SIZE, height: TILE_SIZE * 1.3 }]}
-								onPress={() => editing && pickPhoto(i)}
-								activeOpacity={editing ? 0.7 : 1}
+								onPress={() => pickPhoto(i)}
+								activeOpacity={0.7}
 							>
-								{uri ? (
+								{photos[i] ? (
 									<>
-										<Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-										{editing && (
-											<TouchableOpacity style={styles.removeBtn} onPress={() => removePhoto(i)}>
-												<Text style={styles.removeBtnText}>✕</Text>
-											</TouchableOpacity>
-										)}
+										<Image source={{ uri: photos[i]! }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+										<TouchableOpacity style={styles.removeBtn} onPress={() => removePhoto(i)}>
+											<Text style={styles.removeBtnText}>✕</Text>
+										</TouchableOpacity>
 									</>
 								) : (
 									<View style={styles.photoPlaceholder}>
@@ -195,8 +207,14 @@ export default function MyProfileScreen() {
 									</View>
 								)}
 							</TouchableOpacity>
-						);
-					})}
+						))
+					) : (
+						displayPhotos.filter(Boolean).map((uri, i) => (
+							<View key={i} style={[styles.photoTile, { width: TILE_SIZE, height: TILE_SIZE * 1.3 }]}>
+								<Image source={{ uri: uri! }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+							</View>
+						))
+					)}
 				</View>
 
 				{/* Name + meta */}
@@ -254,6 +272,27 @@ export default function MyProfileScreen() {
 						</View>
 					) : (
 						<Text style={styles.settingValue}>{profile.distance_preference} miles</Text>
+					)}
+				</View>
+
+				{/* Looking for */}
+				<View style={styles.section}>
+					<Text style={styles.sectionLabel}>Looking for</Text>
+					{editing ? (
+						<View style={styles.optionRow}>
+							{(['Men', 'Women', 'Everyone'] as const).map(opt => (
+								<TouchableOpacity
+									key={opt}
+									style={[styles.optionBtn, lookingFor === opt && styles.optionBtnActive]}
+									onPress={() => setLookingFor(opt)}
+									activeOpacity={0.7}
+								>
+									<Text style={[styles.optionText, lookingFor === opt && styles.optionTextActive]}>{opt}</Text>
+								</TouchableOpacity>
+							))}
+						</View>
+					) : (
+						<Text style={styles.settingValue}>{profile.looking_for}</Text>
 					)}
 				</View>
 
@@ -349,17 +388,42 @@ export default function MyProfileScreen() {
 			</ScrollView>
 
 			{/* Preview modal — reflects live edit state when editing */}
-			<Modal visible={previewing} animationType="slide" statusBarTranslucent>
+			<Modal visible={previewing} animationType="slide" statusBarTranslucent onRequestClose={() => setPreviewing(false)}>
 				{(() => {
 					const previewName = editing ? name.trim() || profile.name : profile.name;
 					const previewBio = editing ? bio.trim() : (profile.bio ?? '');
 					const previewInterests = editing ? interests : (profile.interests ?? []);
-					const previewUri = (editing ? photos : displayPhotos).find(Boolean) ?? avatarFallback;
+					const previewPhotos = (editing ? photos : displayPhotos).filter(Boolean) as string[];
+					if (previewPhotos.length === 0) previewPhotos.push(avatarFallback);
+					const clampedIndex = Math.min(previewPhotoIndex, previewPhotos.length - 1);
+					const previewUri = previewPhotos[clampedIndex];
 					return (
 						<View style={styles.previewRoot}>
 							<Image source={{ uri: previewUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
 							<LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={styles.previewGradient} />
-							<TouchableOpacity style={[styles.previewClose, { top: insets.top + 12 }]} onPress={() => setPreviewing(false)}>
+
+							{/* Story bars */}
+							{previewPhotos.length > 1 && (
+								<View style={[styles.previewBars, { top: insets.top + 52 }]}>
+									{previewPhotos.map((_, i) => (
+										<View key={i} style={[styles.previewBar, i <= clampedIndex && styles.previewBarActive]} />
+									))}
+								</View>
+							)}
+
+							{/* Photo nav arrows */}
+							{clampedIndex > 0 && (
+								<TouchableOpacity style={styles.previewArrowLeft} onPress={() => setPreviewPhotoIndex(i => Math.max(0, i - 1))} activeOpacity={0.7} hitSlop={{ top: 60, bottom: 60, left: 10, right: 50 }}>
+									<Text style={styles.previewArrowText}>‹</Text>
+								</TouchableOpacity>
+							)}
+							{clampedIndex < previewPhotos.length - 1 && (
+								<TouchableOpacity style={styles.previewArrowRight} onPress={() => setPreviewPhotoIndex(i => Math.min(previewPhotos.length - 1, i + 1))} activeOpacity={0.7} hitSlop={{ top: 60, bottom: 60, left: 50, right: 10 }}>
+									<Text style={styles.previewArrowText}>›</Text>
+								</TouchableOpacity>
+							)}
+
+							<TouchableOpacity style={[styles.previewClose, { top: insets.top + 12 }]} onPress={() => { setPreviewing(false); setPreviewPhotoIndex(0); }}>
 								<Text style={styles.previewCloseText}>✕</Text>
 							</TouchableOpacity>
 							<View style={[styles.previewInfo, { paddingBottom: insets.bottom + 24 }]}>
@@ -398,6 +462,19 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 20,
 		paddingTop: 16,
 		marginBottom: 20,
+	},
+	headingRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		flex: 1,
+		marginRight: 8,
+	},
+	gearBtn: {
+		padding: 4,
+	},
+	gearIcon: {
+		fontSize: 22,
 	},
 	heading: {
 		color: '#fff',
@@ -520,6 +597,9 @@ const styles = StyleSheet.create({
 		fontSize: 24,
 		fontWeight: '800',
 		textAlign: 'center',
+		borderBottomWidth: 1,
+		borderBottomColor: '#FF2D55',
+		paddingBottom: 4,
 		marginBottom: 4,
 	},
 	nameInput: {
@@ -724,5 +804,41 @@ const styles = StyleSheet.create({
 		color: 'rgba(255,255,255,0.3)',
 		fontSize: 13,
 		fontWeight: '600',
+	},
+	previewBars: {
+		position: 'absolute',
+		left: 12,
+		right: 12,
+		flexDirection: 'row',
+		gap: 4,
+	},
+	previewBar: {
+		flex: 1,
+		height: 2.5,
+		borderRadius: 2,
+		backgroundColor: 'rgba(255,255,255,0.35)',
+	},
+	previewBarActive: {
+		backgroundColor: '#fff',
+	},
+	previewArrowLeft: {
+		position: 'absolute',
+		bottom: Dimensions.get('window').height * 0.21,
+		left: 0,
+		paddingHorizontal: 4,
+		paddingVertical: 70,
+	},
+	previewArrowRight: {
+		position: 'absolute',
+		bottom: Dimensions.get('window').height * 0.21,
+		right: 0,
+		paddingHorizontal: 4,
+		paddingVertical: 70,
+	},
+	previewArrowText: {
+		color: 'rgba(255,255,255,0.3)',
+		fontSize: 80,
+		fontWeight: '100',
+		transform: [{ scaleY: 1.8 }],
 	},
 });

@@ -247,11 +247,11 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
               initialNumToRender={6}
               renderItem={({ item }) => (
                 <View style={styles.matchCell}>
-                  <Image source={{ uri: item.photos[0] }} style={[styles.matchPhoto, !isPremium && styles.lockedPhoto]} blurRadius={isPremium ? 0 : 18} />
+                  <Image source={{ uri: item.photos[0] }} style={styles.matchPhoto} />
                   {!isPremium && (
                     <View style={styles.lockedOverlay}>
                       <Text style={styles.lockedEmoji}>🔒</Text>
-                      <Text style={styles.lockedLabel}>Upgrade to see</Text>
+                      <Text style={styles.lockedLabel}>Locked</Text>
                     </View>
                   )}
                   {isPremium && (
@@ -265,7 +265,7 @@ const MatchesScreen = forwardRef<MatchesScreenHandle, Props>(function MatchesScr
           )}
           {!isPremium && likedYou.length > 0 && (
             <View style={styles.upgradeBanner}>
-              <Text style={styles.upgradeBannerText}>Upgrade to see everyone who liked you</Text>
+              <Text style={styles.upgradeBannerText}>These people already liked you — upgrade to match & message them!</Text>
               <TouchableOpacity style={styles.upgradeBtn} activeOpacity={0.8}>
                 <Text style={styles.upgradeBtnText}>Upgrade · $9.99/mo</Text>
               </TouchableOpacity>
@@ -450,11 +450,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 32,
   },
-  lockedPhoto: {
-    opacity: 0.55,
-  },
   lockedOverlay: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -463,11 +461,11 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   lockedLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
     fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    letterSpacing: 3,
   },
   upgradeBanner: {
     position: 'absolute',

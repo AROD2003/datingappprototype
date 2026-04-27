@@ -56,6 +56,7 @@ export async function fetchFeedProfiles(userId: string): Promise<FeedProfile[]> 
 		.from('profiles')
 		.select('id, name, age, bio, photos, interests, gender, looking_for, distance_preference, age_min, age_max, boosted_until')
 		.neq('id', userId)
+		.eq('hidden', false)
 		.gte('age', me.age_min)
 		.lte('age', me.age_max);
 

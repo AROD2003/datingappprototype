@@ -27,9 +27,12 @@ type Props = {
   likeSignal?: number;
   wiggleSignal?: number;
   onShootShot?: () => void;
+  onArrowPress?: () => void;
+  topInset?: number;
+  storyBarOpacity?: Animated.Value;
 };
 
-function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot }: Props) {
+function ProfileCard({ profile, onLike, matched, locked, likeSignal, wiggleSignal, onShootShot, onArrowPress, topInset = 44, storyBarOpacity }: Props) {
   const [showInfo, setShowInfo] = useState(false);
   const [showExplosion, setShowExplosion] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -152,20 +155,20 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
         />
 
         {/* Story bars */}
-        <View style={styles.storyBars}>
+        <Animated.View style={[styles.storyBars, { top: topInset + 8, opacity: storyBarOpacity ?? 1 }]}>
           {profile.photos.map((_, i) => (
             <View key={i} style={[styles.storyBar, i <= photoIndex && styles.storyBarActive]} />
           ))}
-        </View>
+        </Animated.View>
 
         {/* Photo arrows — TouchableOpacity so they don't trigger double-tap logic */}
         {photoIndex > 0 && (
-          <TouchableOpacity style={styles.arrowLeft} onPress={() => advancePhoto(-1)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.arrowLeft} onPressIn={onArrowPress} onPress={() => advancePhoto(-1)} activeOpacity={0.7} hitSlop={{ top: 60, bottom: 60, left: 10, right: 50 }}>
             <Text style={styles.arrowText}>‹</Text>
           </TouchableOpacity>
         )}
         {photoIndex < profile.photos.length - 1 && (
-          <TouchableOpacity style={styles.arrowRight} onPress={() => advancePhoto(1)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.arrowRight} onPressIn={onArrowPress} onPress={() => advancePhoto(1)} activeOpacity={0.7} hitSlop={{ top: 60, bottom: 60, left: 50, right: 10 }}>
             <Text style={styles.arrowText}>›</Text>
           </TouchableOpacity>
         )}
@@ -268,7 +271,6 @@ const styles = StyleSheet.create({
   },
   storyBars: {
     position: 'absolute',
-    top: 52,
     left: 10,
     right: 10,
     flexDirection: 'row',
@@ -326,7 +328,7 @@ const styles = StyleSheet.create({
   },
   bottom: {
     position: 'absolute',
-    bottom: 100,
+    bottom: H * 0.14,
     left: 0, right: 0,
     paddingHorizontal: 22,
   },
