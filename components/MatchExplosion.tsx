@@ -13,6 +13,9 @@ import { Profile } from '../data/profiles';
 
 const { width: W, height: H } = Dimensions.get('window');
 
+const TAB_HEART_X = W / 2;
+const TAB_HEART_Y = H - 52;
+
 const PARTICLE_COUNT = 40;
 const PARTICLE_SYMBOLS = ['♥', '♥', '✦', '✦', '■', '●', '★'];
 const COLORS = [
@@ -64,18 +67,53 @@ function makeRisingHearts(): RisingHeart[] {
   }));
 }
 
+// Suck hearts spawn spread around the explosion area, matching the visual radius of particles
+const SUCK_COUNT = 36;
+type SuckHeart = {
+  opacity: Animated.Value;
+  scale: Animated.Value;
+  x: Animated.Value; // absolute translateX from startX to target
+  y: Animated.Value; // absolute translateY from startY to target
+  startX: number;
+  startY: number;
+  spawnDelay: number; // when to appear (relative to suck phase start)
+  travelDur: number;
+  size: number;
+  color: string;
+};
+
+const SUCK_COLORS = ['#FF2D55', '#FF6B6B', '#FF69B4', '#FF3CAC', '#FF1493', '#FF80AB'];
+
+function makeSuckHearts(): SuckHeart[] {
+  return Array.from({ length: SUCK_COUNT }, (_, i) => {
+    const angle = (i / SUCK_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+    const dist = W * (0.1 + Math.random() * 0.45);
+    const startX = W / 2 + Math.cos(angle) * dist;
+    const startY = H / 2 + Math.sin(angle) * dist * 0.75;
+    return {
+      opacity: new Animated.Value(0),
+      scale: new Animated.Value(0.3 + Math.random() * 0.7),
+      x: new Animated.Value(0),
+      y: new Animated.Value(0),
+      startX,
+      startY,
+      spawnDelay: Math.random() * 350,
+      travelDur: 550 + Math.random() * 350,
+      size: 8 + Math.random() * 12,
+      color: SUCK_COLORS[i % SUCK_COLORS.length],
+    };
+  });
+}
+
 type Props = { profile: Profile; onDismiss: () => void; onShootShot: () => void };
 
 export default function MatchExplosion({ profile, onDismiss, onShootShot }: Props) {
   const particles = useRef<Particle[]>(makeParticles()).current;
   const hearts = useRef<RisingHeart[]>(makeRisingHearts()).current;
+  const suckHearts = useRef<SuckHeart[]>(makeSuckHearts()).current;
 
-  // 5 shockwave rings
   const rings = useRef(
-    Array.from({ length: 5 }, () => ({
-      s: new Animated.Value(0.1),
-      o: new Animated.Value(1),
-    }))
+    Array.from({ length: 5 }, () => ({ s: new Animated.Value(0.1), o: new Animated.Value(1) }))
   ).current;
 
   const heartRingS = useRef(new Animated.Value(0)).current;
@@ -83,32 +121,70 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
   const heartRing2S = useRef(new Animated.Value(0)).current;
   const heartRing2O = useRef(new Animated.Value(0.7)).current;
 
-  // Double flash
   const flash1O = useRef(new Animated.Value(0)).current;
   const flash2O = useRef(new Animated.Value(0)).current;
-
   const bgO = useRef(new Animated.Value(0)).current;
   const bgPulse = useRef(new Animated.Value(0)).current;
 
-  // Text
   const titleScale = useRef(new Animated.Value(0)).current;
   const titleO = useRef(new Animated.Value(0)).current;
   const subO = useRef(new Animated.Value(0)).current;
   const subY = useRef(new Animated.Value(20)).current;
   const hintO = useRef(new Animated.Value(0)).current;
 
-  const outroOpacity = useRef(new Animated.Value(1)).current;
+  // Separate fade for main explosion content vs suck layer
+  const mainOpacity = useRef(new Animated.Value(1)).current;
   const outroRunning = useRef(false);
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startSuckPhase = (fast = false) => {
+    // Fade out the explosion content
+    Animated.timing(mainOpacity, {
+      toValue: 0,
+      duration: fast ? 200 : 500,
+      useNativeDriver: true,
+    }).start();
+
+    // Animate every suck heart to converge on the matches icon
+    suckHearts.forEach(h => {
+      const dx = TAB_HEART_X - h.startX;
+      const dy = TAB_HEART_Y - h.startY;
+      const delay = fast ? h.spawnDelay * 0.3 : h.spawnDelay;
+      const dur = fast ? h.travelDur * 0.6 : h.travelDur;
+
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.parallel([
+          // Appear
+          Animated.timing(h.opacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+          // Travel toward target with acceleration
+          Animated.timing(h.x, { toValue: dx, duration: dur, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          Animated.timing(h.y, { toValue: dy, duration: dur, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          // Shrink + fade as they arrive
+          Animated.sequence([
+            Animated.delay(dur * 0.5),
+            Animated.parallel([
+              Animated.timing(h.scale, { toValue: 0, duration: dur * 0.5, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+              Animated.timing(h.opacity, { toValue: 0, duration: dur * 0.5, useNativeDriver: true }),
+            ]),
+          ]),
+        ]),
+      ]).start();
+    });
+
+    const totalDur = fast ? 900 : 1400;
+    dismissTimer.current = setTimeout(() => onDismiss(), totalDur);
+  };
 
   const playOutro = () => {
     if (outroRunning.current) return;
     outroRunning.current = true;
-    Animated.timing(outroOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
-      .start(() => onDismiss());
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    startSuckPhase(true);
   };
 
   useEffect(() => {
-    // Double flash: big hit + echo
+    // Flash
     Animated.sequence([
       Animated.timing(flash1O, { toValue: 1, duration: 40, useNativeDriver: true }),
       Animated.timing(flash1O, { toValue: 0, duration: 180, useNativeDriver: true }),
@@ -119,15 +195,13 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
 
     // BG
     Animated.timing(bgO, { toValue: 0.88, duration: 100, useNativeDriver: true }).start(() => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(bgPulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(bgPulse, { toValue: 0, duration: 600, useNativeDriver: true }),
-        ])
-      ).start();
+      Animated.loop(Animated.sequence([
+        Animated.timing(bgPulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(bgPulse, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ])).start();
     });
 
-    // 5 staggered shockwave rings
+    // Shockwave rings
     rings.forEach((r, i) => {
       Animated.sequence([
         Animated.delay(i * 60),
@@ -138,7 +212,7 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
       ]).start();
     });
 
-    // Two expanding heart rings
+    // Heart rings
     Animated.parallel([
       Animated.timing(heartRingS, { toValue: 6, duration: 700, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.sequence([
@@ -157,7 +231,7 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
       ]),
     ]).start();
 
-    // Particles — fast stagger, big spread
+    // Particles
     Animated.stagger(5, particles.map(p =>
       Animated.parallel([
         Animated.timing(p.opacity, { toValue: 1, duration: 25, useNativeDriver: true }),
@@ -188,7 +262,7 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
       ]).start();
     });
 
-    // Title: explosive scale-in bounce
+    // Text
     Animated.sequence([
       Animated.delay(70),
       Animated.parallel([
@@ -197,7 +271,6 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
       ]),
     ]).start();
 
-    // Subtitle
     Animated.sequence([
       Animated.delay(320),
       Animated.parallel([
@@ -206,14 +279,35 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
       ]),
     ]).start();
 
-    // Hint
     Animated.sequence([
       Animated.delay(900),
       Animated.timing(hintO, { toValue: 0.5, duration: 300, useNativeDriver: true }),
     ]).start();
 
-    const timer = setTimeout(playOutro, 2800);
-    return () => clearTimeout(timer);
+    // Suck hearts begin appearing while the explosion is still visible (overlap)
+    // They fade in at their scattered positions as the explosion is winding down
+    const preSpawnTimer = setTimeout(() => {
+      suckHearts.forEach(h => {
+        Animated.sequence([
+          Animated.delay(h.spawnDelay),
+          Animated.timing(h.opacity, { toValue: 0.7, duration: 200, useNativeDriver: true }),
+        ]).start();
+      });
+    }, 1400);
+
+    // Then kick off the full suck-in convergence
+    const suckTimer = setTimeout(() => {
+      if (!outroRunning.current) {
+        outroRunning.current = true;
+        startSuckPhase(false);
+      }
+    }, 2000);
+
+    return () => {
+      clearTimeout(preSpawnTimer);
+      clearTimeout(suckTimer);
+      if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    };
   }, []);
 
   const bgColor = bgPulse.interpolate({
@@ -223,71 +317,83 @@ export default function MatchExplosion({ profile, onDismiss, onShootShot }: Prop
 
   return (
     <TouchableWithoutFeedback onPress={playOutro}>
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: outroOpacity }]}>
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: bgColor, opacity: bgO }]} />
+      <View style={StyleSheet.absoluteFill}>
 
-        <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash1O }]} pointerEvents="none" />
-        <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash2O }]} pointerEvents="none" />
+        {/* Main explosion — fades out as suck hearts converge */}
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: mainOpacity }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: bgColor, opacity: bgO }]} />
+          <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash1O }]} pointerEvents="none" />
+          <Animated.View style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash2O }]} pointerEvents="none" />
 
-        {/* Shockwave rings */}
-        <View style={styles.center} pointerEvents="none">
-          {rings.map((r, i) => (
-            <Animated.View key={i} style={[styles.ring, { opacity: r.o, transform: [{ scale: r.s }] }]} />
+          <View style={styles.center} pointerEvents="none">
+            {rings.map((r, i) => (
+              <Animated.View key={i} style={[styles.ring, { opacity: r.o, transform: [{ scale: r.s }] }]} />
+            ))}
+          </View>
+
+          <View style={styles.center} pointerEvents="none">
+            <Animated.Text style={[styles.heartRing, { opacity: heartRingO, transform: [{ scale: heartRingS }] }]}>♡</Animated.Text>
+            <Animated.Text style={[styles.heartRing, { color: '#FF69B4', opacity: heartRing2O, transform: [{ scale: heartRing2S }] }]}>♡</Animated.Text>
+          </View>
+
+          <View style={styles.center} pointerEvents="none">
+            {particles.map((p, i) => {
+              const rotate = p.rotate.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0deg', `${i % 2 === 0 ? 600 : -600}deg`],
+              });
+              return (
+                <Animated.Text key={i} style={{
+                  position: 'absolute',
+                  fontSize: p.size, color: p.color,
+                  opacity: p.opacity,
+                  transform: [{ translateX: p.x }, { translateY: p.y }, { scale: p.scale }, { rotate }],
+                }}>{p.symbol}</Animated.Text>
+              );
+            })}
+          </View>
+
+          {hearts.map((h, i) => (
+            <Animated.Text key={i} pointerEvents="none" style={[styles.risingHeart, {
+              left: W / 2 + h.startX,
+              bottom: H * 0.12,
+              opacity: h.opacity,
+              transform: [{ translateY: h.y }, { translateX: h.x }, { scale: h.scale }],
+            }]}>♥</Animated.Text>
+          ))}
+
+          <View style={styles.textBlock} pointerEvents="none">
+            <Animated.View style={{ opacity: titleO, transform: [{ scale: titleScale }] }}>
+              <Text style={styles.titleLine1}>IT'S A</Text>
+              <Text style={styles.titleLine2}>MATCH!</Text>
+            </Animated.View>
+            <Animated.Text style={[styles.sub, { opacity: subO, transform: [{ translateY: subY }] }]}>
+              You and {profile.name} liked each other
+            </Animated.Text>
+            <Animated.View style={{ opacity: hintO }}>
+              <TouchableOpacity onPress={onShootShot} activeOpacity={0.75} style={styles.shotBtn}>
+                <Text style={styles.shotBtnText}>Shoot your shot!</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </Animated.View>
+
+        {/* Suck hearts — rendered above main content so they persist through the fade */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {suckHearts.map((h, i) => (
+            <Animated.Text key={i} style={{
+              position: 'absolute',
+              left: h.startX,
+              top: h.startY,
+              fontSize: h.size,
+              color: h.color,
+              opacity: h.opacity,
+              transform: [{ translateX: h.x }, { translateY: h.y }, { scale: h.scale }],
+            }}>♥</Animated.Text>
           ))}
         </View>
 
-        {/* Two expanding heart rings */}
-        <View style={styles.center} pointerEvents="none">
-          <Animated.Text style={[styles.heartRing, { opacity: heartRingO, transform: [{ scale: heartRingS }] }]}>♡</Animated.Text>
-          <Animated.Text style={[styles.heartRing, { color: '#FF69B4', opacity: heartRing2O, transform: [{ scale: heartRing2S }] }]}>♡</Animated.Text>
-        </View>
-
-        {/* Particles */}
-        <View style={styles.center} pointerEvents="none">
-          {particles.map((p, i) => {
-            const rotate = p.rotate.interpolate({
-              inputRange: [0, 1],
-              outputRange: ['0deg', `${Math.random() > 0.5 ? 600 : -600}deg`],
-            });
-            return (
-              <Animated.Text key={i} style={{
-                position: 'absolute',
-                fontSize: p.size, color: p.color,
-                opacity: p.opacity,
-                transform: [{ translateX: p.x }, { translateY: p.y }, { scale: p.scale }, { rotate }],
-              }}>{p.symbol}</Animated.Text>
-            );
-          })}
-        </View>
-
-        {/* Rising hearts */}
-        {hearts.map((h, i) => (
-          <Animated.Text key={i} pointerEvents="none" style={[styles.risingHeart, {
-            left: W / 2 + h.startX,
-            bottom: H * 0.12,
-            opacity: h.opacity,
-            transform: [{ translateY: h.y }, { translateX: h.x }, { scale: h.scale }],
-          }]}>♥</Animated.Text>
-        ))}
-
-        {/* Text */}
-        <View style={styles.textBlock} pointerEvents="none">
-          <Animated.View style={{ opacity: titleO, transform: [{ scale: titleScale }] }}>
-            <Text style={styles.titleLine1}>IT'S A</Text>
-            <Text style={styles.titleLine2}>MATCH!</Text>
-          </Animated.View>
-
-          <Animated.Text style={[styles.sub, { opacity: subO, transform: [{ translateY: subY }] }]}>
-            You and {profile.name} liked each other
-          </Animated.Text>
-
-          <Animated.View style={{ opacity: hintO }}>
-            <TouchableOpacity onPress={onShootShot} activeOpacity={0.75} style={styles.shotBtn}>
-              <Text style={styles.shotBtnText}>Tap to shoot your shot!</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </Animated.View>
+      </View>
     </TouchableWithoutFeedback>
   );
 }
@@ -347,9 +453,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 20,
   },
-  shotBtn: {
-    marginTop: 8,
-  },
+  shotBtn: { marginTop: 8 },
   shotBtnText: {
     color: '#fff',
     fontSize: 18,

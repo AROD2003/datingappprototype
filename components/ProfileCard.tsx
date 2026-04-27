@@ -197,8 +197,8 @@ const likeTextScaleX = useRef(new Animated.Value(0)).current;
         {/* Profile info */}
         <View style={styles.bottom}>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{profile.name}, {profile.age}</Text>
             {profile.verified && <Text style={styles.verified}>✓</Text>}
+            <Text style={styles.name}>{profile.name}, {profile.age}</Text>
             <Text style={styles.infoToggle} onPress={() => setShowInfo(v => !v)}>
               {showInfo ? 'less ' : 'more '}
               <Text style={styles.infoToggleArrow}>{showInfo ? '↓' : '↑'}</Text>

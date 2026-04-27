@@ -5,6 +5,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   Animated,
   Dimensions,
+  Easing,
   StyleSheet,
   Text,
   View,
@@ -44,11 +45,17 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
   const hapticTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wiggleFired = useRef(false);
 
+  const bannerY = useRef(new Animated.Value(-200)).current;
+  const bannerOpacity = useRef(new Animated.Value(1)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bannerActive = useRef(false);
+
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => { scrollYVal.current = value; });
     return () => {
       scrollY.removeListener(id);
       hapticTimers.current.forEach(clearTimeout);
+      if (bannerTimer.current) clearTimeout(bannerTimer.current);
     };
   }, []);
 
@@ -88,6 +95,58 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     });
   };
 
+  const dismissBannerInstant = () => {
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerY.stopAnimation();
+    bannerY.setValue(-200);
+    bannerOpacity.setValue(1);
+    bannerActive.current = false;
+  };
+
+  const hideLikedBanner = () => {
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerOpacity.setValue(1);
+    Animated.sequence([
+      Animated.spring(bannerY, {
+        toValue: 8,
+        tension: 400,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(bannerY, {
+          toValue: -200,
+          duration: 320,
+          easing: Easing.in(Easing.back(1.5)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bannerOpacity, {
+          toValue: 0,
+          duration: 260,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      bannerOpacity.setValue(1);
+      bannerActive.current = false;
+    });
+  };
+
+  const showLikedBanner = () => {
+    if (bannerActive.current) return;
+    bannerActive.current = true;
+    bannerY.setValue(-200);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Animated.spring(bannerY, {
+      toValue: 0,
+      tension: 280,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+    bannerTimer.current = setTimeout(() => hideLikedBanner(), 3000);
+  };
+
   const handleLike = (profile: Profile) => {
     if (matchedIds.has(profile.id)) return;
     setMatchedIds(prev => new Set([...prev, profile.id]));
@@ -123,6 +182,7 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
     })
     .onUpdate((e) => {
       panDistance.current = Math.abs(e.translationY);
+      if (panDistance.current > 8) dismissBannerInstant();
       const raw = dragStart.current + e.translationY;
       const min = -(PROFILES.length - 1) * H;
       const backLimit = Math.max(0, lockedThresholdRef.current - 1);
@@ -159,8 +219,11 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
       if (!profile) return;
       // Don't like locked profiles
       if (currentIdx.current < lockedThresholdRef.current) return;
-      // Don't re-like a profile already liked
-      if (likedIds.current.has(profile.id)) return;
+      // Show banner if already liked
+      if (likedIds.current.has(profile.id)) {
+        showLikedBanner();
+        return;
+      }
       likedIds.current.add(profile.id);
       setLikeSignals(prev => ({ ...prev, [profile.id]: (prev[profile.id] ?? 0) + 1 }));
     });
@@ -179,6 +242,20 @@ export default function FeedScreen({ onMatch, onShootShot }: Props) {
           <Text style={styles.logo}>RT</Text>
         </View>
       </View>
+
+      <Animated.View
+        style={[styles.likedBanner, { paddingTop: insets.top + 85, opacity: bannerOpacity, transform: [{ translateY: bannerY }] }]}
+        pointerEvents="none"
+      >
+        <View style={styles.likedBannerRow}>
+          <Text style={styles.likedBannerText}>ALREADY L</Text>
+          <View style={styles.likedBannerIWrap}>
+            <Text style={styles.likedBannerHeart}>♥</Text>
+            <Text style={styles.likedBannerText}>I</Text>
+          </View>
+          <Text style={styles.likedBannerText}>KED!</Text>
+        </View>
+      </Animated.View>
 
       <GestureDetector gesture={composed}>
         <View style={styles.scrollArea}>
@@ -230,6 +307,39 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: H,
+  },
+  likedBanner: {
+    position: 'absolute',
+    top: -100,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    alignItems: 'center',
+    paddingBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  likedBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  likedBannerIWrap: {
+    alignItems: 'center',
+  },
+  likedBannerHeart: {
+    color: '#000',
+    fontSize: 9,
+    lineHeight: 11,
+    marginBottom: -5,
+    textAlign: 'center',
+    marginRight: 2,
+  },
+  likedBannerText: {
+    color: '#000',
+    fontSize: 18,
+    fontFamily: 'LilitaOne_400Regular',
+    letterSpacing: 2,
   },
   logoRow: {
     flexDirection: 'row',
